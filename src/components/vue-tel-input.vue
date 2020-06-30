@@ -17,21 +17,30 @@
           <span class="vti__dropdown-arrow">{{ open ? "▲" : "▼" }}</span>
         </slot>
       </span>
-      <ul ref="list" class="vti__dropdown-list" v-show="open" :class="dropdownOpenDirection">
-        <li
-          v-for="(pb, index) in sortedCountries"
-          :class="['vti__dropdown-item', getItemClass(index, pb.iso2)]"
-          :key="pb.iso2 + (pb.preferred ? '-preferred' : '')"
-          @click="choose(pb, true)"
-          @mousemove="selectedIndex = index"
-        >
-          <div v-if="enabledFlags" :class="['vti__flag', pb.iso2.toLowerCase()]" />
-          <strong>{{ pb.name }}</strong>
-          <span v-if="dropdownOptions && !dropdownOptions.disabledDialCode">
-            +{{ pb.dialCode }}
-          </span>
-        </li>
-      </ul>
+      <div ref="list" class="vti__dropdown-wrapper" v-show="open" :class="dropdownOpenDirection">
+        <input class="vti__dropdown-country-search"
+          v-if="isSearchEnabled"
+          :value="countriesSearchString"
+          :placeholder="searchInputPlaceholder"
+          @input="onSearchCountryChange"
+          @click="onSearchCountryClick"
+        />
+        <ul class="vti__dropdown-list">
+          <li
+            v-for="(pb, index) in actualCountries"
+            :class="['vti__dropdown-item', getItemClass(index, pb.iso2)]"
+            :key="pb.iso2 + (pb.preferred ? '-preferred' : '')"
+            @click="choose(pb, true)"
+            @mousemove="selectedIndex = index"
+          >
+            <div v-if="enabledFlags" :class="['vti__flag', pb.iso2.toLowerCase()]" />
+            <strong>{{ pb.name }}</strong>
+            <span v-if="dropdownOptions && !dropdownOptions.disabledDialCode">
+              +{{ pb.dialCode }}
+            </span>
+          </li>
+        </ul>
+      </div>
     </div>
     <input
       ref="input"
@@ -162,6 +171,14 @@ export default {
       type: Array,
       default: () => getDefault('onlyCountries'),
     },
+    searchByCode: {
+      type: Boolean,
+      default: false,
+    },
+    searchByName: {
+      type: Boolean,
+      default: false,
+    },
     placeholder: {
       type: String,
       default: () => getDefault('placeholder'),
@@ -191,6 +208,8 @@ export default {
     return {
       phone: '',
       activeCountry: { iso2: '' },
+      actualCountries: [],
+      countriesSearchString: '',
       open: false,
       finishMounted: false,
       selectedIndex: null,
@@ -201,6 +220,9 @@ export default {
     };
   },
   computed: {
+    isSearchEnabled() {
+      return this.searchByCode || this.searchByName;
+    },
     parsedPlaceholder() {
       if (!this.finishMounted) {
         return '';
@@ -265,6 +287,17 @@ export default {
       }
       return this.phoneObject.number[key] || '';
     },
+    searchInputPlaceholder() {
+      switch (true) {
+        case this.searchByName:
+          return 'Type country name to search';
+
+        case this.searchByCode:
+          return 'Type dial code to search';
+      }
+
+      return null;
+    },
   },
   watch: {
     // eslint-disable-next-line func-names
@@ -284,6 +317,8 @@ export default {
         this.setDropdownPosition();
         this.$emit('open');
       } else {
+        this.actualCountries = this.sortedCountries;
+        this.countriesSearchString = '';
         this.$emit('close');
       }
     },
@@ -320,6 +355,8 @@ export default {
           && this.activeCountry.dialCode) {
           this.phone = `+${this.activeCountry.dialCode}`;
         }
+
+        this.actualCountries = this.sortedCountries;
         this.$emit('validate', this.phoneObject);
         this.$emit('onValidate', this.phoneObject); // Deprecated
       })
@@ -401,6 +438,17 @@ export default {
         .map((countryCode) => this.findCountry(countryCode))
         .filter(Boolean);
     },
+    getCountriesSearchBy(country) {
+      switch (true) {
+        case this.searchByName:
+          return country.name;
+
+        case this.searchByCode:
+          return `+${country.dialCode}`;
+      }
+
+      return null;
+    },
     findCountry(iso = '') {
       return this.filteredCountries.find((country) => country.iso2 === iso.toUpperCase());
     },
@@ -445,6 +493,19 @@ export default {
     },
     testCustomValidate() {
       return this.customValidate instanceof RegExp ? this.customValidate.test(this.phone) : false;
+    },
+    onSearchCountryChange(e) {
+      this.countriesSearchString = e.target.value;
+
+      this.actualCountries = this.sortedCountries.filter(country => {
+        const searchBy = this.getCountriesSearchBy(country);
+
+        return searchBy && ~searchBy.indexOf(this.countriesSearchString);
+      });
+    },
+    onSearchCountryClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
     },
     onInput(e) {
       if (this.validCharactersOnly && !this.testCharacters()) {
@@ -616,6 +677,22 @@ export default {
   margin-right: 5px;
   margin-left: 5px;
 }
+.vti__dropdown-wrapper {
+  position: absolute;
+}
+.vti__dropdown-wrapper.below {
+  top: 33px;
+}
+.vti__dropdown-wrapper.above {
+  top: auto;
+  bottom: 100%;
+}
+.vti__dropdown-country-search {
+  width: 100%;
+  display: block;
+  font-size: 16px;
+  padding: 8px 18px;
+}
 .vti__dropdown-list {
   z-index: 1;
   padding: 0;
@@ -624,18 +701,10 @@ export default {
   list-style: none;
   max-height: 200px;
   overflow-y: scroll;
-  position: absolute;
   left: -1px;
   background-color: #fff;
   border: 1px solid #ccc;
   width: 390px;
-}
-.vti__dropdown-list.below {
-  top: 33px;
-}
-.vti__dropdown-list.above {
-  top: auto;
-  bottom: 100%;
 }
 .vti__dropdown-arrow {
   transform: scaleY(0.5);
