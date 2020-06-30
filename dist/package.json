@@ -20,7 +20,7 @@
   "files": [
     "dist/"
   ],
-  "main": "dist/vue-tel-input.umd.js",
+  "main": "dist/index.js",
   "module": "dist/index.js",
   "copyToDist": [
     "src",
